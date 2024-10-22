@@ -11,16 +11,15 @@ uses alpha vantage to get all data from it IPO of the stock to right now
 returns either a pandas dataframe of the stock data or an error message
 """
 def getHistoricalData(ticker: str, apiKey: str):
-    url=f'https://www.alphavantage.co/query'
+    url = f'https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol={ticker}&interval=5min&apikey={apiKey}'
 
-    params={'function': 'TIME_SERIES_DAILY_ADJUSTED', 'symbol': ticker, 'outputsize': 'full', 'apikey': apiKey}
-    response=requests.get(url, params=params)
+    response=requests.get(url)
     data=response.json()
 
     if "Time Series (Daily)" in data:
         timeSeries=data['Time Series (Daily)']
         df=pd.DataFrame.from_dict(timeSeries, orient='index')
-        df.columns=['open', 'high', 'low', 'close', 'adjusted close', 'volume', 'dividend amount', 'split coefficient']
+        df.columns=['open', 'high', 'low', 'close', 'volume']
         df.index=pd.to_datetime(df.index)
         df=df.sort_index(ascending=True)
         return df
@@ -34,16 +33,15 @@ in the pandas df and is so appends that data
 """
 def updateData(ticker: str, apiKey: str, df: pd.DataFrame):
     lastDate=df.index.max().date()
-    url=f'https://www.alphavantage.co/query'
+    url = f'https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol={ticker}&interval=5min&apikey={apiKey}'
     
-    params={'function': 'TIME_SERIES_DAILY_ADJUSTED', 'symbol': ticker, 'outputsize': 'compact', 'apikey': apiKey}
-    response=requests.get(url, params=params)
+    response=requests.get(url)
     data=response.json()
 
     if "Time Series (Daily)" in data:
         timeSeries=data['Time Series (Daily)']
         newDf=pd.DataFrame.from_dict(timeSeries, orient='index')
-        newDf.columns=['open', 'high', 'low', 'close', 'adjusted close', 'volume', 'dividend amount', 'split coefficient']
+        newDf.columns=['open', 'high', 'low', 'close', 'volume']
         newDf.index=pd.to_datetime(newDf.index)
         newDf = newDf[newDf.index.date > lastDate]
 
@@ -69,15 +67,19 @@ stores the list of stock tickers, fetchs teh alpha vantage api key, and stores t
 the pickle data storage folder, has a for loop to go through each ticker in the list and
 gets their historical data, and then schedules the update function for every hour
 also schedules to update the pickle file after the update funciton is run
+NOTE: apiKey is am enviornmental variable on my pc so it wont work on any other system
 """
 def main():
     tickers=['META', 'AMZN', 'NFLX', 'GOOG']
-    apiKey='apiKey' #need to get alpha vantage api key, also dont hardcode this
+    apiKey=os.getenv('ALPHA_VANTAGE_API_KEY') #this isnt going to work on any other system, due to lack of env var
+    if not apiKey:
+        raise ValueError("Alpha Vantage API key not found in environment variables.")
     folder='./data'
 
     os.makedirs(folder, exist_ok=True)
 
     for ticker in tickers:
+        print(f"getting info for {ticker}")
         filePath=os.path.join(folder, f'{ticker}.pkl')
 
         if os.path.exists(filePath):
@@ -85,10 +87,12 @@ def main():
                 df=pickle.load(file)
             print(f"loaded data for {ticker}")
         else:
+            print(f"getting historical data for {ticker}")
             df=getHistoricalData(ticker, apiKey)
             saveDfToPickle(df, filePath)
             print(f"fetched historical data for {ticker}, saved at {filePath}")
         
+        time.sleep(12) #adjust based on number of api calls per day, limited to 25 per day rn
         schedule.every(1).hours.do(lambda t=ticker, a=apiKey, d=df, f=filePath: saveDfToPickle(updateData(t, a, d), f))
         print(f"scheduled updates for {ticker} every hour")
 
