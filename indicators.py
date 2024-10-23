@@ -1,5 +1,7 @@
 import pandas as pd
 import pickle
+import os
+import time
 
 def loadDataframe(filename: str) -> pd.DataFrame:
     with open(filename, 'rb') as file:
@@ -8,12 +10,15 @@ def loadDataframe(filename: str) -> pd.DataFrame:
     return df
 
 def appendSMA(df: pd.DataFrame, window: int) -> pd.DataFrame:
-    lastCalculatedDay=df['SMA'].last_valid_index()
+    if f'SMA_{window}' not in df.columns:
+        df[f'SMA_{window}']=pd.Series(dtype=float)
+
+    lastCalculatedDay=df[f'SMA_{window}'].last_valid_index()
     if lastCalculatedDay is None:
-        df['SMA']=df['close'].rolling(window=window, min_periods=1).mean()
+        df[f'SMA_{window}']=df['close'].rolling(window=window, min_periods=1).mean()
     else:
         newSMA=df['close'].iloc[lastCalculatedDay+1:].rolling(window=window, min_periods=1).mean()
-        df['SMA'].iloc[lastCalculatedDay+1]=newSMA
+        df[f'SMA_{window}'].iloc[lastCalculatedDay+1]=newSMA
     return df
 
 def calculateRSI(df: pd.DataFrame, window: int=14) -> pd.DataFrame:
@@ -29,6 +34,9 @@ def calculateRSI(df: pd.DataFrame, window: int=14) -> pd.DataFrame:
     return df
 
 def appendRSI(df: pd.DataFrame, window: int) -> pd.DataFrame:
+    if 'RSI' not in df.columns:
+        df['RSI']=pd.Series(dtype=float)
+
     lastCalculatedDay=df['RSI'].last_valid_index()
     if lastCalculatedDay is None:
         df=calculateRSI(df, window)
@@ -65,3 +73,49 @@ def appendBollingerBands(df: pd.DataFrame, window: int, multiplier: float=2.0) -
         df['Upper Band'].iloc[lastCalculatedDay+1]=newUpperBand
         df['Lower Band'].iloc[lastCalculatedDay+1]=newLowerBand
     return df
+
+def processIndicators(filename: str, smaWindowOne: int, smaWindowTwo: int, smaWindowThree: int, rsiWindow: int, bollingerWindow: int, multiplier: float):
+    df=loadDataframe(filename)
+    print("sma 1")
+    df=appendSMA(df, smaWindowOne)
+    print("sma 2")
+    df=appendSMA(df, smaWindowTwo)
+    print("sma 3")
+    df=appendSMA(df, smaWindowThree)
+    df=appendRSI(df, rsiWindow)
+    df=appendBollingerBands(df, bollingerWindow, multiplier)
+
+    with open(filename, 'wb') as file:
+        pickle.dump(df, file)
+    print(f"indicators written/updated for {filename}")
+
+def main():
+    filepath='./data'
+    smaWindowOne=10
+    smaWindowTwo=20
+    smaWindowThree=50
+    rsiWindow=14
+    bollingerWindow=20
+    multiplier=2.0
+
+    for file in os.listdir(filepath):
+        print(f"file: {file}")
+        filePath=os.path.join(filepath, file)
+        print(f"filepath: {filePath}")  
+        if os.path.exists(filePath):
+            lastModTime=None
+
+            while True:
+                try:
+                    currentModTime=os.path.getmtime(filePath)
+                    if lastModTime is None or currentModTime > lastModTime:
+                        print("new data uploaded, writing corresponding indicators...")
+                        processIndicators(filePath, smaWindowOne, smaWindowTwo, smaWindowThree, rsiWindow, bollingerWindow, multiplier)
+                        lastModTime=currentModTime
+                        time.sleep (60)
+                except Exception as e:
+                    print(f"error ocurred:, {e}")
+                    time.sleep(60)
+
+if __name__ == "__main__":
+    main()
