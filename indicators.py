@@ -17,8 +17,11 @@ def appendSMA(df: pd.DataFrame, window: int) -> pd.DataFrame:
     if lastCalculatedDay is None:
         df[f'SMA_{window}']=df['close'].rolling(window=window, min_periods=1).mean()
     else:
-        newSMA=df['close'].iloc[lastCalculatedDay+1:].rolling(window=window, min_periods=1).mean()
-        df[f'SMA_{window}'].iloc[lastCalculatedDay+1]=newSMA
+        if lastIndex + 1 >= len(df):
+            df.loc[len(df)] = [None] * len(df.columns)
+        lastIndex=df.index.get_loc(lastCalculatedDay)
+        newSMA=df['close'].iloc[lastIndex+1:].rolling(window=window, min_periods=1).mean()
+        df.loc[df.index[lastIndex+1], f'SMA_{window}']=newSMA
     return df
 
 def calculateRSI(df: pd.DataFrame, window: int=14) -> pd.DataFrame:
@@ -41,6 +44,8 @@ def appendRSI(df: pd.DataFrame, window: int) -> pd.DataFrame:
     if lastCalculatedDay is None:
         df=calculateRSI(df, window)
     else:
+        if lastIndex + 1 >= len(df):
+            df.loc[len(df)] = [None] * len(df.columns)
         delta=df['close'].diff(1)
         gain=delta.where(delta > 0,0)
         loss=delta.where(delta < 0,0)
@@ -54,7 +59,7 @@ def appendRSI(df: pd.DataFrame, window: int) -> pd.DataFrame:
     return df
 
 def appendBollingerBands(df: pd.DataFrame, window: int, multiplier: float=2.0) -> pd.DataFrame:
-    lastCalculatedDay=df['Middle Band'].last_valid_index() if 'Middle Band' in df.columns() else None
+    lastCalculatedDay=df['Middle Band'].last_valid_index() if 'Middle Band' in df.columns else None
     if lastCalculatedDay is None:
         df['Middle Band']=df['close'].rolling(window=window, min_periods=1).mean()
         rollingStd=df['close'].rolling(window=window, min_periods=1).std()
@@ -76,12 +81,14 @@ def appendBollingerBands(df: pd.DataFrame, window: int, multiplier: float=2.0) -
 
 def processIndicators(filename: str, smaWindowOne: int, smaWindowTwo: int, smaWindowThree: int, rsiWindow: int, bollingerWindow: int, multiplier: float):
     df=loadDataframe(filename)
+    df['close'] = pd.to_numeric(df['close'], errors='coerce')
     print("sma 1")
     df=appendSMA(df, smaWindowOne)
     print("sma 2")
     df=appendSMA(df, smaWindowTwo)
     print("sma 3")
     df=appendSMA(df, smaWindowThree)
+    #print(df)
     df=appendRSI(df, rsiWindow)
     df=appendBollingerBands(df, bollingerWindow, multiplier)
 
@@ -97,25 +104,25 @@ def main():
     rsiWindow=14
     bollingerWindow=20
     multiplier=2.0
+    lastModTime={}
 
-    for file in os.listdir(filepath):
-        print(f"file: {file}")
-        filePath=os.path.join(filepath, file)
-        print(f"filepath: {filePath}")  
-        if os.path.exists(filePath):
-            lastModTime=None
+    while True:
+        for file in os.listdir(filepath):
+            print(f"file: {file}")
+            filePath=os.path.join(filepath, file)
+            print(f"filepath: {filePath}")  
+            if os.path.exists(filePath):
 
-            while True:
-                try:
-                    currentModTime=os.path.getmtime(filePath)
-                    if lastModTime is None or currentModTime > lastModTime:
-                        print("new data uploaded, writing corresponding indicators...")
-                        processIndicators(filePath, smaWindowOne, smaWindowTwo, smaWindowThree, rsiWindow, bollingerWindow, multiplier)
-                        lastModTime=currentModTime
-                        time.sleep (60)
-                except Exception as e:
-                    print(f"error ocurred:, {e}")
-                    time.sleep(60)
+                    try:
+                        currentModTime=os.path.getmtime(filePath)
+                        print(lastModTime)
+                        if lastModTime.get(file) is None or currentModTime > lastModTime:
+                            print("new data uploaded, writing corresponding indicators...")
+                            processIndicators(filePath, smaWindowOne, smaWindowTwo, smaWindowThree, rsiWindow, bollingerWindow, multiplier)
+                            lastModTime[file]=currentModTime
+                    except Exception as e:
+                        print(f"error ocurred:, {e}")
+        time.sleep(60)
 
 if __name__ == "__main__":
     main()
