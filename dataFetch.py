@@ -11,7 +11,7 @@ uses alpha vantage to get all data from it IPO of the stock to right now
 returns either a pandas dataframe of the stock data or an error message
 """
 def getHistoricalData(ticker: str, apiKey: str):
-    url = f'https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol={ticker}&interval=5min&apikey={apiKey}'
+    url = f'https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol={ticker}&outputsize=full&apikey={apiKey}'
 
     response=requests.get(url)
     data=response.json()
@@ -47,6 +47,7 @@ def updateData(ticker: str, apiKey: str, df: pd.DataFrame):
 
         if not newDf.empty:
             updatedDf=pd.concat([df, newDf]).sort_index(ascending=True)
+            print("new data appended")
             return updatedDf
         else:
             print("No new data for this ticker")
@@ -85,13 +86,15 @@ def main():
         if os.path.exists(filePath):
             with open(filePath, 'rb') as file:
                 df=pickle.load(file)
-            print(f"loaded data for {ticker}")
+                print(f"loaded data for {ticker}, fecthing new data")
+                df=updateData(ticker, apiKey, df)
         else:
             print(f"getting historical data for {ticker}")
             df=getHistoricalData(ticker, apiKey)
             saveDfToPickle(df, filePath)
             print(f"fetched historical data for {ticker}, saved at {filePath}")
         
+        print(df)
         time.sleep(12) #adjust based on number of api calls per day, limited to 25 per day rn
         schedule.every(1).hours.do(lambda t=ticker, a=apiKey, d=df, f=filePath: saveDfToPickle(updateData(t, a, d), f))
         print(f"scheduled updates for {ticker} every hour")
