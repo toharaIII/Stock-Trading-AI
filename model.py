@@ -55,12 +55,24 @@ model.add(Dense(1)) #output is 1 value
 model.compile(optimizer='adam',loss='mean_squared_error')
 
 #unsure of following components
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, shuffle=False)
+"""
+regarding the below section of code:
+we are dividing our data into training and testing numpy arrays via sklearns train_test_split function
+we do this because the model will examine the values stored in each element of the training arrays to try and find patterns in the data, so it will have access to the input and output training arrays at the same time
+we then use kera's fit function which will have the model parse of the training arrays 50 times, as determined via the epochs kwarg,
+additionally for every 32 sequences parsed the weights of the neurons will be adjusted as determined via the batch_size kwarg
+after every epoch with the training data it is then given the test inputs and asked to predict the corresponding test output, which is then compared to the actual corresponding test output stored using our mean_squared_error loss function assigned to our model object a few lines earlier
+"""
+inputsTrain, inputsTest, outputsTrain, outputsTest = train_test_split(inputs, outputs, test_size=0.2, shuffle=False)
 
-history = model.fit(X_train, y_train, epochs=50, batch_size=32, 
-                    validation_data=(X_test, y_test))
+history = model.fit(inputsTrain, outputsTrain, epochs=50, batch_size=32, validation_data=(inputsTest, outputsTest))
 
-y_pred = model.predict(X_test)
-# You can inverse the scaling if needed to get the price scale back
-y_pred = scaler.inverse_transform(y_pred)
-y_test = scaler.inverse_transform(y_test.reshape(-1, 1))
+
+
+"""
+regarding the below section of code:
+outputPred is the array of the models predictions, but since we normalized all the stock prices this will be a value between 0-1 which we then denormalize in order to bring back to a real price
+"""
+outputPred = model.predict(inputsTest)
+outputPred = scaler.inverse_transform(outputPred)
+outputsTest = scaler.inverse_transform(outputsTest.reshape(-1, 1))
