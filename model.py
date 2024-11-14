@@ -2,20 +2,29 @@ import pandas as pd
 import numpy as np
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.model_selection import train_test_split
-import tensorflow as tf
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import LSTM, Dense, Dropout
+import tensorflow as tf; tf.keras
+from tf_keras.models import Sequential
+from tf_keras.layers import LSTM, Dense, Dropout
+import matplotlib.pyplot as plt
 
 #need to make this a loop to get all of them
-df=pd.read_pickle(r'/data/stock')
+df=pd.read_pickle(r'./data/META.pkl')
+# Convert columns to numeric, invalid parsing will be set as NaN
+df[['open', 'high', 'low', 'close', 'volume', 'SMA_10', 'SMA_20', 'SMA_50', 'RSI_14', 
+    'Middle Band', 'Upper Band', 'Lower Band']] = df[['open', 'high', 'low', 'close', 
+    'volume', 'SMA_10', 'SMA_20', 'SMA_50', 'RSI_14', 'Middle Band', 'Upper Band', 
+    'Lower Band']].apply(pd.to_numeric, errors='coerce')
+
+df.replace([np.inf, -np.inf], np.nan, inplace=True)
+df.fillna(df.mean(), inplace=True)
 
  #MinMaxScaler is an object that allows you to normalize data 
  #(set data max value to 1 and min to 0 with all others falling withint 0-1 proportionally)
 scaler=MinMaxScaler()
 #applying scaler to all columns in a given stock df
-dfScaled=scaler.fit_transform(df[['Open', 'High', 'Low', 'Close', 'Volume', 
-                                     'SMA_10', 'SMA_20', 'SMA_50', 'RSI', 
-                                     'BB_Mid', 'BB_Low', 'BB_High']]) #names off memory, need to double check
+dfScaled=scaler.fit_transform(df[['open', 'high', 'low', 'close', 'volume', 
+                                     'SMA_10', 'SMA_20', 'SMA_50', 'RSI_14', 
+                                     'Middle Band', 'Upper Band', 'Lower Band']])
 """
 ok heres whats happening in this function:
 we have a single dataframe and a sequence length as the inputs
@@ -29,7 +38,7 @@ def createSequences(Data: pd.DataFrame, sequenceLength=60) -> pd.DataFrame:
     inputs, output=[],[]
     for i in range(sequenceLength, len(Data)):
         inputs.append(Data[i-sequenceLength:i]) #slicing every sequence number of days into an element in inputs
-        output.append(Data[i:3]) #i believe closing price is third column
+        output.append(Data[i,3]) #i believe closing price is third column
     return np.array(inputs), np.array(output)
 sequenceLength=60
 inputs, output=createSequences(dfScaled, sequenceLength)
@@ -54,6 +63,24 @@ model.add(Dense(1)) #output is 1 value
 
 model.compile(optimizer='adam',loss='mean_squared_error')
 
+<<<<<<< HEAD
+# unsure of following components
+X_train, X_test, y_train, y_test = train_test_split(inputs, output, test_size=0.2, shuffle=False)
+
+
+history = model.fit(X_train, y_train, epochs=50, batch_size=32, 
+                   validation_data=(X_test, y_test))
+
+y_pred = model.predict(X_test)
+
+plt.plot(y_test, label="Actual Prices")
+plt.plot(y_pred, label="Predicted Prices")
+plt.legend()
+plt.title("Predicted vs. Actual Closing Prices")
+plt.xlabel("Days")
+plt.ylabel("Stock Price")
+plt.show()
+=======
 #unsure of following components
 """
 regarding the below section of code:
@@ -76,3 +103,4 @@ outputPred is the array of the models predictions, but since we normalized all t
 outputPred = model.predict(inputsTest)
 outputPred = scaler.inverse_transform(outputPred)
 outputsTest = scaler.inverse_transform(outputsTest.reshape(-1, 1))
+>>>>>>> 08a292015f10cc1ef8df868b59ff41c23281cfec
