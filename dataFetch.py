@@ -71,7 +71,7 @@ also schedules to update the pickle file after the update funciton is run
 NOTE: apiKey is am enviornmental variable on my pc so it wont work on any other system
 """
 def main():
-    tickers=['META', 'AMZN', 'NFLX', 'GOOG']
+    tickers=['AAPL', 'AMZN', 'GOOG', 'META', 'MSFT', 'NVDA', 'TSLA']
     apiKey=os.getenv('ALPHA_VANTAGE_API_KEY') #this isnt going to work on any other system, due to lack of env var
     if not apiKey:
         raise ValueError("Alpha Vantage API key not found in environment variables.")

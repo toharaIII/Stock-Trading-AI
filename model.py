@@ -6,102 +6,77 @@ import tensorflow as tf; tf.keras
 from tf_keras.models import Sequential
 from tf_keras.layers import LSTM, Dense, Dropout
 import matplotlib.pyplot as plt
+import os
 
-#need to make this a loop to get all of them
-df=pd.read_pickle(r'./data/META.pkl')
-# Convert columns to numeric, invalid parsing will be set as NaN
-df[['open', 'high', 'low', 'close', 'volume', 'SMA_10', 'SMA_20', 'SMA_50', 'RSI_14', 
-    'Middle Band', 'Upper Band', 'Lower Band']] = df[['open', 'high', 'low', 'close', 
-    'volume', 'SMA_10', 'SMA_20', 'SMA_50', 'RSI_14', 'Middle Band', 'Upper Band', 
-    'Lower Band']].apply(pd.to_numeric, errors='coerce')
+def preprocessData(filePath, sequenceLength=60):
+    #need to make this a loop to get all of them
+    df=pd.read_pickle(r'./data/META.pkl')
+    # Convert columns to numeric, invalid parsing will be set as NaN
+    df[['open', 'high', 'low', 'close', 'volume', 'SMA_10', 'SMA_20', 'SMA_50', 'RSI_14', 
+        'Middle Band', 'Upper Band', 'Lower Band']] = df[['open', 'high', 'low', 'close', 
+        'volume', 'SMA_10', 'SMA_20', 'SMA_50', 'RSI_14', 'Middle Band', 'Upper Band', 
+        'Lower Band']].apply(pd.to_numeric, errors='coerce')
 
-df.replace([np.inf, -np.inf], np.nan, inplace=True)
-df.fillna(df.mean(), inplace=True)
+    df.replace([np.inf, -np.inf], np.nan, inplace=True)
+    df.fillna(df.mean(), inplace=True)
 
- #MinMaxScaler is an object that allows you to normalize data 
- #(set data max value to 1 and min to 0 with all others falling withint 0-1 proportionally)
-scaler=MinMaxScaler()
-#applying scaler to all columns in a given stock df
-dfScaled=scaler.fit_transform(df[['open', 'high', 'low', 'close', 'volume', 
+    #MinMaxScaler is an object that allows you to normalize data 
+    #(set data max value to 1 and min to 0 with all others falling withint 0-1 proportionally)
+    scaler=MinMaxScaler()
+    #applying scaler to all columns in a given stock df
+    dfScaled=scaler.fit_transform(df[['open', 'high', 'low', 'close', 'volume', 
                                      'SMA_10', 'SMA_20', 'SMA_50', 'RSI_14', 
                                      'Middle Band', 'Upper Band', 'Lower Band']])
-"""
-ok heres whats happening in this function:
-we have a single dataframe and a sequence length as the inputs
-a sequence is a period of days with the default at 60 days
-our inputs is a list that will take a sequence number of rows of data from our dataframe and append them as an element in the list
-our output list will append the closing value of the day after the last day in the sequence 
-so sequence is days 0-59 output is closing on day 60
-the ai will look at all data in a given index it inputs and believe that some components of it is leading to the output value being what it is
-and will try to determine what if any correlations can be made, thus determining a trading strategy and when to act based off said strategy
-"""
-def createSequences(Data: pd.DataFrame, sequenceLength=60) -> pd.DataFrame:
+
     inputs, output=[],[]
-    for i in range(sequenceLength, len(Data)):
-        inputs.append(Data[i-sequenceLength:i]) #slicing every sequence number of days into an element in inputs
-        output.append(Data[i,3]) #i believe closing price is third column
-    return np.array(inputs), np.array(output)
-sequenceLength=60
-inputs, output=createSequences(dfScaled, sequenceLength)
+    for i in range(sequenceLength, len(dfScaled)):
+        inputs.append(dfScaled[i-sequenceLength:i]) #slicing every sequence number of days into an element in inputs
+        output.append(dfScaled[i,3]) #i believe closing price is third column
+    return np.array(inputs), np.array(output), scaler #return scaler to reverse scaling for graphing
 
-"""
-regarding below section of code:
-we are using a sequential model, which means that it feeds the outputs from each layer directly into the next layer
-we have 5 layers in total, 2 LSTM layers, 2 dropout layers and 1 dense layer
-LSTM layer: (long short term memory) retains some data from each element in our input array that was previously passed in
-this allows access to certain pieces of past sequence data when determining the outputs for the current iteration (within the same training epoch)
-dropout layer: does no actual calculations instead it will randomly set 20% of our 50 neurons in each layer to 0 activitions and therfore 0 outputs
-this is useful since it prevents decision making from becoming dependent on a few arbitarily selected neurons instead of using the entire apparatus
-dense: all 50 neurons from the prior layer output into a single neuron which makes a calculation and outputs the predicted price
-"""
-model=Sequential()
+def buildModel(inputShape):
+    model=Sequential()
+    model.add(LSTM(50, return_sequences=True, input_shape=inputShape))
+    model.add(Dropout(0.2))
+    model.add(LSTM(50, return_sequences=False))
+    model.add(Dropout(0.2)) #20% of all neurons are 'dropped' (set to 0) to prevent individual neuron dependence
+    model.add(Dense(1)) #output is 1 value
+    model.compile(optimizer='adam',loss='mean_squared_error')
+    return model;
 
-model.add(LSTM(50, return_sequences=True, input_shape=(inputs.shape[1], inputs.shape[2])))
-model.add(Dropout(0.2))
-model.add(LSTM(50, return_sequences=False))
-model.add(Dropout(0.2)) #20% of all neurons are 'dropped' (set to 0) to prevent individual neuron dependence
-model.add(Dense(1)) #output is 1 value
+def main():
+    filePath='./data'
+    sequenceLength=60
+    allInputs=[]
+    allOutputs=[]
 
-model.compile(optimizer='adam',loss='mean_squared_error')
+    for file in os.listdir(filePath):
+        filePathJoined=os.path.join(filePath, file)
+        if not file.endswith('.pkl'):
+            continue
 
-<<<<<<< HEAD
-# unsure of following components
-X_train, X_test, y_train, y_test = train_test_split(inputs, output, test_size=0.2, shuffle=False)
+        print(f"processing file: {file}")
+        inputs, output, scaler=preprocessData(filePathJoined, sequenceLength)
+        allInputs.append(inputs)
+        allOutputs.append(output)
 
+    allInputs=np.concatenate(allInputs, axis=0)
+    allOutputs=np.concatenate(allOutputs, axis=0)
 
-history = model.fit(X_train, y_train, epochs=50, batch_size=32, 
-                   validation_data=(X_test, y_test))
+    xTrain, xTest, yTrain, yTest = train_test_split(inputs, output, test_size=0.2, shuffle=False)
+    model=buildModel((xTrain.shape[1], xTrain.shape[2]))
+    history=model.fit(xTrain, yTrain, epochs=50, batch_size=32, validation_data=(xTest, yTest))
+    model.save('./trainedModel')
+    
+    yPred=model.predict(xTest)
 
-y_pred = model.predict(X_test)
+    plt.plot(yTest, label="Actual Prices")
+    plt.plot(yPred, label="Predicted Prices")
+    plt.legend()
+    plt.title(f"Predicted vs. Actual Closing Prices for {file}")
+    plt.xlabel("Days")
+    plt.ylabel("Stock Price")
+    plt.show()
 
-plt.plot(y_test, label="Actual Prices")
-plt.plot(y_pred, label="Predicted Prices")
-plt.legend()
-plt.title("Predicted vs. Actual Closing Prices")
-plt.xlabel("Days")
-plt.ylabel("Stock Price")
-plt.show()
-=======
-#unsure of following components
-"""
-regarding the below section of code:
-we are dividing our data into training and testing numpy arrays via sklearns train_test_split function
-we do this because the model will examine the values stored in each element of the training arrays to try and find patterns in the data, so it will have access to the input and output training arrays at the same time
-we then use kera's fit function which will have the model parse of the training arrays 50 times, as determined via the epochs kwarg,
-additionally for every 32 sequences parsed the weights of the neurons will be adjusted as determined via the batch_size kwarg
-after every epoch with the training data it is then given the test inputs and asked to predict the corresponding test output, which is then compared to the actual corresponding test output stored using our mean_squared_error loss function assigned to our model object a few lines earlier
-"""
-inputsTrain, inputsTest, outputsTrain, outputsTest = train_test_split(inputs, outputs, test_size=0.2, shuffle=False)
-
-history = model.fit(inputsTrain, outputsTrain, epochs=50, batch_size=32, validation_data=(inputsTest, outputsTest))
-
-
-
-"""
-regarding the below section of code:
-outputPred is the array of the models predictions, but since we normalized all the stock prices this will be a value between 0-1 which we then denormalize in order to bring back to a real price
-"""
-outputPred = model.predict(inputsTest)
-outputPred = scaler.inverse_transform(outputPred)
-outputsTest = scaler.inverse_transform(outputsTest.reshape(-1, 1))
->>>>>>> 08a292015f10cc1ef8df868b59ff41c23281cfec
+if __name__ == "__main__":
+    main()
