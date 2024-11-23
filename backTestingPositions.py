@@ -1,12 +1,43 @@
 import pandas as pd
+import numpy as np
 import pickle
 import os
-import tensorflow as tf
+import tensorflow as tf;
+import keras
 
 def main():
     dataPath='./data'
-    modelPath='./trainedModel'
-    model=tf.keras.models.load_model(modelPath)
+    modelPath='./trainedModel.h5'
+
+
+
+
+
+
+    def load_model(model_path):
+    # Remove the problematic time_major parameter
+        def remove_time_major(config):
+            if 'time_major' in config:
+                del config['time_major']
+            return config
+    
+    # Create custom objects dict with just the LSTM fix
+        custom_objects = {
+            'LSTM': lambda **kwargs: keras.layers.LSTM(**remove_time_major(kwargs))
+        }
+    
+    # Load the model with the fix
+        model = keras.models.load_model(model_path, custom_objects=custom_objects)
+        return model
+
+    # Use it like this:
+    model = load_model(modelPath)
+
+
+
+
+
+
     stockData={}
 
     for file in os.listdir(dataPath):
@@ -18,6 +49,7 @@ def main():
             stockData[ticker]=df
         
     commonDates=set.intersection(*(set(df.index) for df in stockData.values()))
+    commonDates=list(commonDates)
     for ticker in stockData:
         stockData[ticker]=stockData[ticker].loc[commonDates].sort_index()
 
@@ -27,11 +59,20 @@ def main():
     portfolioShares={ticker: 0 for ticker in stockData} #tracks number of shares in active position for each stock
     tradeLog=[] #history of all trades made
 
-    for date in sorted(commonDates):
+    SEQUENCE_LENGTH = 60
+
+    for dateIdx, date in enumerate(sorted(commonDates)):
         for ticker, df in stockData.items():
+            print(ticker)
+            if dateIdx < SEQUENCE_LENGTH:  # Skip until we have enough history
+                continue
+
+            sequence=df.iloc[dateIdx - SEQUENCE_LENGTH:dateIdx]
             row=df.loc[date] #get the row for the corresponding date
             closingPrice=row['close']
-            predictedPrice=model.predict([row.values])[0]
+
+            inputData=np.array([sequence.values], dtype=np.float32)
+            predictedPrice=model.predict(inputData, verbose=0)[0]
 
             position=portfolioPositions[ticker]
             cash=portfolioCash[ticker]
